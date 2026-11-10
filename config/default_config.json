@@ -1,0 +1,19 @@
+{
+  "min_gear_teeth": 11,
+  "max_gear_teeth": 40,
+  "default_enabled_teeth": [
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+    31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+  ],
+  "cost_model": {
+    "stage_penalty": 50,
+    "teeth_multiplier": 1.0
+  },
+  "solver_defaults": {
+    "max_solutions": 3,
+    "max_stages": 4,
+    "allow_approximate": false,
+    "use_worm": false
+  }
+}
