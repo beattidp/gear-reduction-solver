@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://beattidp.github.io/gear-reduction-solver/schema/gear_reduction_solution.schema.json",
+  "title": "GearReductionSolutionSchema",
+  "description": "JSON Schema specification for Gear Reduction Solver outputs (Spur, Worm, and Planetary solutions across CLI and Web).",
+  "oneOf": [
+    { "$ref": "#/$defs/CliOutputEnvelope" },
+    { "$ref": "#/$defs/SolutionList" },
+    { "$ref": "#/$defs/SpurSolution" },
+    { "$ref": "#/$defs/PlanetarySolution" }
+  ],
+  "$defs": {
+    "SpurStage": {
+      "type": "object",
+      "description": "A single reduction stage consisting of a driving pinion (or 1-tooth worm screw) and a driven gear.",
+      "properties": {
+        "pinion": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of teeth on the driving pinion gear (1 for a single-start worm)."
+        },
+        "gear": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of teeth on the driven gear / worm wheel."
+        }
+      },
+      "required": ["pinion", "gear"],
+      "additionalProperties": false
+    },
+
+    "PlanetaryStage": {
+      "type": "object",
+      "description": "A single epicyclic (planetary) gear stage meeting coaxiality and assembly constraints.",
+      "properties": {
+        "sun": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of teeth on the sun gear."
+        },
+        "planet": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of teeth on each planet gear."
+        },
+        "ring": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of teeth on the outer internal ring gear (R = S + 2P)."
+        },
+        "planets_count": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Number of planets symmetrically mounted on the carrier (typically 3)."
+        },
+        "stator": {
+          "type": "string",
+          "enum": ["ring", "carrier", "sun"],
+          "description": "The stationary member held fixed in this stage."
+        },
+        "input": {
+          "type": "string",
+          "enum": ["sun", "ring"],
+          "description": "The mechanical input member for speed reduction."
+        },
+        "output": {
+          "type": "string",
+          "enum": ["carrier", "ring"],
+          "description": "The mechanical output member for speed reduction."
+        },
+        "ratio": {
+          "type": "string",
+          "pattern": "^[0-9]+/[0-9]+$",
+          "description": "Exact rational reduction ratio of this stage as a fraction string (e.g. '4/1')."
+        },
+        "is_inverted": {
+          "type": "boolean",
+          "description": "True if this stage reverses the direction of rotation (only Carrier-fixed stages invert)."
+        }
+      },
+      "required": [
+        "sun",
+        "planet",
+        "ring",
+        "planets_count",
+        "stator",
+        "input",
+        "output",
+        "ratio",
+        "is_inverted"
+      ],
+      "additionalProperties": false
+    },
+
+    "SpurSolution": {
+      "type": "object",
+      "description": "Complete compound spur / worm gear reduction solution.",
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SpurStage" },
+          "minItems": 1,
+          "description": "Ordered sequence of reduction stages from input to output."
+        },
+        "achieved_ratio_fraction": {
+          "type": "string",
+          "pattern": "^[0-9]+/[0-9]+$",
+          "description": "Composite reduction ratio represented as an exact rational fraction string (e.g. '10/1')."
+        },
+        "achieved_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 1.0,
+          "description": "Composite reduction ratio as a floating-point decimal."
+        },
+        "cost": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Fabrication and assembly cost (sum of teeth + stage penalties)."
+        },
+        "relative_cost": {
+          "type": "number",
+          "minimum": 1.0,
+          "description": "Relative cost normalized to the lowest-cost solution in the result set (lowest = 1.0000)."
+        },
+        "is_approximate": {
+          "type": "boolean",
+          "description": "True if the achieved ratio deviates from the requested target ratio."
+        },
+        "deviation_percentage": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+(\\.[0-9]+)?%$",
+          "description": "Formatted percentage deviation from target ratio (e.g. '0.50%')."
+        }
+      },
+      "required": [
+        "stages",
+        "achieved_ratio_fraction",
+        "achieved_ratio",
+        "cost",
+        "relative_cost",
+        "is_approximate"
+      ],
+      "additionalProperties": false
+    },
+
+    "PlanetarySolution": {
+      "type": "object",
+      "description": "Complete epicyclic (planetary) gear reduction solution.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "planetary"
+        },
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PlanetaryStage" },
+          "minItems": 1,
+          "description": "Ordered sequence of cascaded planetary stages."
+        },
+        "achieved_ratio_fraction": {
+          "type": "string",
+          "pattern": "^[0-9]+/[0-9]+$",
+          "description": "Composite reduction ratio represented as an exact rational fraction string."
+        },
+        "achieved_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 1.0,
+          "description": "Composite reduction ratio as a floating-point decimal."
+        },
+        "cost": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Fabrication and assembly cost."
+        },
+        "relative_cost": {
+          "type": "number",
+          "minimum": 1.0,
+          "description": "Relative cost normalized to the lowest-cost solution."
+        },
+        "is_approximate": {
+          "type": "boolean",
+          "description": "True if the achieved ratio deviates from the requested target ratio."
+        },
+        "is_inverted": {
+          "type": "boolean",
+          "description": "True if the composite planetary cascade net inverts output rotation."
+        },
+        "deviation_percentage": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+(\\.[0-9]+)?%$",
+          "description": "Formatted percentage deviation from target ratio."
+        }
+      },
+      "required": [
+        "type",
+        "stages",
+        "achieved_ratio_fraction",
+        "achieved_ratio",
+        "cost",
+        "relative_cost",
+        "is_approximate",
+        "is_inverted"
+      ],
+      "additionalProperties": false
+    },
+
+    "SolutionList": {
+      "type": "array",
+      "description": "Array of solutions copied directly from the web interface.",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/SpurSolution" },
+          { "$ref": "#/$defs/PlanetarySolution" }
+        ]
+      }
+    },
+
+    "CliOutputEnvelope": {
+      "type": "object",
+      "description": "Wrapper envelope emitted by CLI with --json flag.",
+      "properties": {
+        "target_ratio": {
+          "type": "string",
+          "pattern": "^[0-9]+/[0-9]+$",
+          "description": "Requested target reduction ratio fraction string."
+        },
+        "target_ratio_float": {
+          "type": "number",
+          "exclusiveMinimum": 1.0,
+          "description": "Requested target reduction ratio float value."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["spur", "planetary", "all"],
+          "description": "Solver family mode invoked."
+        },
+        "solutions_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of returned solutions."
+        },
+        "solutions": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/SpurSolution" },
+              { "$ref": "#/$defs/PlanetarySolution" }
+            ]
+          },
+          "description": "List of primary reduction solutions."
+        },
+        "spur_solutions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SpurSolution" },
+          "description": "Spur solutions (populated when mode is 'all')."
+        },
+        "planetary_solutions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PlanetarySolution" },
+          "description": "Planetary solutions (populated when mode is 'planetary' or 'all')."
+        }
+      },
+      "required": [
+        "target_ratio",
+        "target_ratio_float",
+        "mode",
+        "solutions_count"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

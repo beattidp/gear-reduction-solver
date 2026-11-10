@@ -37,6 +37,7 @@ class TestWebBundle:
         assert (web_dir / "js" / "app.js").is_file()
         assert (web_dir / "js" / "worker.js").is_file()
         assert (web_dir / "python" / "gear_reduction.zip").is_file()
+        assert (web_dir / "schema" / "gear_reduction_solution.schema.json").is_file()
 
     def test_github_pages_workflow_configured(self) -> None:
         """Verifies GitHub Actions workflow deploys the web/ folder."""

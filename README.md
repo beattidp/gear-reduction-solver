@@ -47,6 +47,12 @@ Try the interactive solver directly in your browser:
 - **Interactive Gear Tooth Inventory Modal**: Native `<dialog>` modal allowing real-time toggling of available gear sizes (11T–40T), persisted in browser `localStorage`.
 - **Export Capabilities**: Easily copy solution sets as structured JSON or inspection tables.
 
+### 4. Machine-Readable JSON & Formal Schema
+- **CLI JSON Mode**: Emit structured JSON via the `--json` flag for automated pipelines, external scripts, and CAD tools.
+- **Web JSON Export**: One-click "Copy JSON" exports raw solution objects directly to your clipboard.
+- **Formal JSON Schema (Draft 2020-12)**: Standardized schema provided in [`schema/gear_reduction_solution.schema.json`](schema/gear_reduction_solution.schema.json) and hosted live at:  
+  👉 **[https://beattidp.github.io/gear-reduction-solver/schema/gear_reduction_solution.schema.json](https://beattidp.github.io/gear-reduction-solver/schema/gear_reduction_solution.schema.json)**
+
 ---
 
 ## Quick Start: Web Application
@@ -147,6 +153,8 @@ gear-reduction-solver/
 │   ├── proposals/               # Implementation proposals and architecture designs
 │   ├── walkthroughs/            # Milestone walkthroughs and verification summaries
 │   └── worklogs/                # Detailed chronological development worklogs
+├── schema/
+│   └── gear_reduction_solution.schema.json # JSON Schema (Draft 2020-12) specification
 ├── scripts/
 │   └── build_web_assets.py      # Packages Python core into web/python/gear_reduction.zip
 ├── src/
@@ -162,6 +170,7 @@ gear-reduction-solver/
 │   ├── test_cli.py              # CLI option parsing, output tables, and JSON
 │   ├── test_models.py           # Domain models, physical validation, cost calculation
 │   ├── test_planetary.py        # Planetary kinematics, geometry, and solver tests
+│   ├── test_schema.py           # JSON Schema validation test suite (jsonschema)
 │   ├── test_solver_approx.py    # Bounded approximate search tests
 │   ├── test_solver_exact.py     # Exact Meet-in-the-Middle reduction tests
 │   └── test_web_bundle.py       # Web assets packaging and Pyodide worker bridge tests
@@ -170,8 +179,10 @@ gear-reduction-solver/
     ├── css/style.css            # Modern responsive CSS design system
     ├── js/app.js                # Main thread UI controller and state manager
     ├── js/worker.js             # Dedicated Web Worker hosting Pyodide WebAssembly
-    └── python/
-        └── gear_reduction.zip   # Bundled pure-Python package for browser execution
+    ├── python/
+    │   └── gear_reduction.zip   # Bundled pure-Python package for browser execution
+    └── schema/
+        └── gear_reduction_solution.schema.json # Schema hosted on GitHub Pages
 ```
 
 ---
