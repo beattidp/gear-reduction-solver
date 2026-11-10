@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Client-side Gear Reduction Solver running entirely in-browser with Pyodide WebAssembly. Solves Spur, Worm, and Epicyclic Planetary gear trains.">
+    <title>Gear Reduction Solver | Pyodide WebAssembly</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-inner">
+            <div class="brand">
+                <span class="brand-icon">⚙️</span>
+                <div>
+                    <h1 class="brand-title">Gear Reduction Solver</h1>
+                    <p class="brand-subtitle">Kinematic Optimization &amp; Synthesis (Spur, Worm &amp; Planetary)</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <span id="engine-status" class="status-pill status-loading" title="WebAssembly Engine Status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Loading WASM...</span>
+                </span>
+                <button type="button" id="btn-open-inventory" class="btn btn-outline" title="Configure available gear tooth counts">
+                    <span>⚙️ Inventory:</span>
+                    <span id="inventory-badge" class="badge">30/30</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <div class="tabs-container">
+            <!-- Navigation Tablist following Modern Web Guidance -->
+            <div role="tablist" class="tablist" aria-label="Gear Reduction Solvers">
+                <button type="button" role="tab" id="tab-spur" aria-selected="true" class="tab-btn" focusgroupstart>
+                    <span class="tab-icon">🔄</span> Spur &amp; Worm Trains
+                </button>
+                <button type="button" role="tab" id="tab-planetary" aria-selected="false" class="tab-btn">
+                    <span class="tab-icon">🪐</span> Planetary (Epicyclic) Trains
+                </button>
+            </div>
+
+            <!-- Tabpanel 1: Spur & Worm Train Solver -->
+            <section role="tabpanel" id="panel-spur" aria-labelledby="tab-spur" class="tab-panel" tabindex="0">
+                <div class="panel-layout">
+                    <div class="card config-card">
+                        <h2 class="card-title">Reduction Specifications</h2>
+                        <form id="form-spur" class="solver-form" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="spur-ratio" class="form-label">
+                                    Target Reduction Ratio <span class="required">*</span>
+                                </label>
+                                <div class="input-with-presets">
+                                    <input type="text" id="spur-ratio" class="form-input" placeholder="e.g. 10:1, 25:2, 12.5" required autocomplete="off">
+                                </div>
+                                <div class="presets-row" aria-label="Quick ratio presets">
+                                    <span class="preset-label">Presets:</span>
+                                    <button type="button" class="btn-preset" data-target="spur-ratio" data-val="4:1">4:1</button>
+                                    <button type="button" class="btn-preset" data-target="spur-ratio" data-val="10:1">10:1</button>
+                                    <button type="button" class="btn-preset" data-target="spur-ratio" data-val="31:1">31:1</button>
+                                    <button type="button" class="btn-preset" data-target="spur-ratio" data-val="60:1">60:1</button>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-2">
+                                <div class="form-group">
+                                    <label for="spur-max-stages" class="form-label">Max Stages</label>
+                                    <select id="spur-max-stages" class="form-select">
+                                        <option value="1">1 Stage</option>
+                                        <option value="2">2 Stages</option>
+                                        <option value="3">3 Stages</option>
+                                        <option value="4" selected>4 Stages</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="spur-max-solutions" class="form-label">Max Solutions</label>
+                                    <select id="spur-max-solutions" class="form-select">
+                                        <option value="1">1 Solution</option>
+                                        <option value="3" selected>3 Solutions</option>
+                                        <option value="5">5 Solutions</option>
+                                        <option value="10">10 Solutions</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-options">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="spur-worm">
+                                    <span><strong>Single-Start Worm Input</strong> (high reduction on stage 1)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="spur-approx">
+                                    <span><strong>Allow Approximate Ratios</strong> (if exact is unreachable)</span>
+                                </label>
+                            </div>
+
+                            <details class="advanced-details">
+                                <summary>Advanced Cost Tuning</summary>
+                                <div class="advanced-content">
+                                    <div class="form-group">
+                                        <label for="spur-worm-multiplier" class="form-label">
+                                            Worm Wheel Cost Multiplier (favors smaller worm wheels):
+                                        </label>
+                                        <input type="number" id="spur-worm-multiplier" class="form-input" value="3.0" step="0.5" min="1.0" max="10.0">
+                                    </div>
+                                </div>
+                            </details>
+
+                            <button type="submit" id="btn-solve-spur" class="btn btn-primary btn-block">
+                                Calculate Spur / Worm Trains
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="card results-card">
+                        <div class="results-header">
+                            <h2 class="card-title">Calculated Solutions</h2>
+                            <div class="results-actions" id="spur-actions" hidden>
+                                <button type="button" id="btn-copy-spur-json" class="btn btn-sm btn-outline">Copy JSON</button>
+                            </div>
+                        </div>
+                        <div id="spur-results-container" class="results-container">
+                            <div class="empty-state">
+                                <span class="empty-icon">💡</span>
+                                <p>Enter a target reduction ratio and click <strong>Calculate</strong> to evaluate optimal compound gear trains.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tabpanel 2: Planetary Gear Train Solver -->
+            <section role="tabpanel" id="panel-planetary" aria-labelledby="tab-planetary" class="tab-panel" hidden tabindex="0">
+                <div class="panel-layout">
+                    <div class="card config-card">
+                        <h2 class="card-title">Planetary Specifications</h2>
+                        <form id="form-planetary" class="solver-form" onsubmit="return false;">
+                            <div class="form-group">
+                                <label for="planetary-ratio" class="form-label">
+                                    Target Reduction Ratio <span class="required">*</span>
+                                </label>
+                                <div class="input-with-presets">
+                                    <input type="text" id="planetary-ratio" class="form-input" placeholder="e.g. 4:1, 10:1, 16:1" required autocomplete="off">
+                                </div>
+                                <div class="presets-row" aria-label="Quick planetary presets">
+                                    <span class="preset-label">Presets:</span>
+                                    <button type="button" class="btn-preset" data-target="planetary-ratio" data-val="3:1">3:1</button>
+                                    <button type="button" class="btn-preset" data-target="planetary-ratio" data-val="4:1">4:1</button>
+                                    <button type="button" class="btn-preset" data-target="planetary-ratio" data-val="10:1">10:1</button>
+                                    <button type="button" class="btn-preset" data-target="planetary-ratio" data-val="16:1">16:1</button>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Stator Configuration (Fixed Member)</label>
+                                <div class="stator-segmented-control" role="radiogroup" aria-label="Stator Member">
+                                    <label class="stator-option">
+                                        <input type="radio" name="planetary-stator" value="any" checked>
+                                        <span>Any (Optimal)</span>
+                                    </label>
+                                    <label class="stator-option">
+                                        <input type="radio" name="planetary-stator" value="ring">
+                                        <span>Ring Fixed (>2:1)</span>
+                                    </label>
+                                    <label class="stator-option">
+                                        <input type="radio" name="planetary-stator" value="carrier">
+                                        <span>Carrier Fixed (Rev)</span>
+                                    </label>
+                                    <label class="stator-option">
+                                        <input type="radio" name="planetary-stator" value="sun">
+                                        <span>Sun Fixed (1-2:1)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-grid-3">
+                                <div class="form-group">
+                                    <label for="planetary-planets-count" class="form-label">Planets (N)</label>
+                                    <select id="planetary-planets-count" class="form-select">
+                                        <option value="2">2 Planets</option>
+                                        <option value="3" selected>3 Planets</option>
+                                        <option value="4">4 Planets</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="planetary-max-stages" class="form-label">Max Stages</label>
+                                    <select id="planetary-max-stages" class="form-select">
+                                        <option value="1">1 Stage</option>
+                                        <option value="2">2 Stages</option>
+                                        <option value="3" selected>3 Stages</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="planetary-max-solutions" class="form-label">Max Sol.</label>
+                                    <select id="planetary-max-solutions" class="form-select">
+                                        <option value="1">1</option>
+                                        <option value="3" selected>3</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-options">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="planetary-approx">
+                                    <span><strong>Allow Approximate Ratios</strong> (if exact is unreachable)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="planetary-strict-ring">
+                                    <span><strong>Strict Ring Inventory</strong> (constrain ring teeth to 11T-40T)</span>
+                                </label>
+                            </div>
+
+                            <details class="advanced-details">
+                                <summary>Advanced Planetary Parameters</summary>
+                                <div class="advanced-content">
+                                    <div class="form-grid-2">
+                                        <div class="form-group">
+                                            <label for="planetary-ring-multiplier" class="form-label">Ring Multiplier:</label>
+                                            <input type="number" id="planetary-ring-multiplier" class="form-input" value="1.5" step="0.1" min="1.0" max="5.0">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="planetary-max-ring" class="form-label">Max Ring Teeth:</label>
+                                            <input type="number" id="planetary-max-ring" class="form-input" value="120" step="1" min="30" max="250">
+                                        </div>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <button type="submit" id="btn-solve-planetary" class="btn btn-primary btn-block">
+                                Calculate Planetary Trains
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="card results-card">
+                        <div class="results-header">
+                            <h2 class="card-title">Calculated Solutions</h2>
+                            <div class="results-actions" id="planetary-actions" hidden>
+                                <button type="button" id="btn-copy-planetary-json" class="btn btn-sm btn-outline">Copy JSON</button>
+                            </div>
+                        </div>
+                        <div id="planetary-results-container" class="results-container">
+                            <div class="empty-state">
+                                <span class="empty-icon">🪐</span>
+                                <p>Select your stator preference, target ratio, and click <strong>Calculate</strong> to synthesize optimal epicyclic stages.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modal Dialog: Gear Tooth Inventory (11T - 40T) -->
+    <dialog id="inventory-dialog" class="modal-dialog" aria-labelledby="inventory-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 id="inventory-title" class="modal-title">Gear Teeth Inventory</h2>
+                    <p class="modal-subtitle">Select which gear sizes are available in your physical collection.</p>
+                </div>
+                <button type="button" id="btn-close-inventory-x" class="modal-close" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="modal-toolbar">
+                <button type="button" id="btn-select-all-teeth" class="btn btn-sm btn-secondary">Select All</button>
+                <button type="button" id="btn-deselect-all-teeth" class="btn btn-sm btn-secondary">Deselect All</button>
+                <button type="button" id="btn-reset-teeth" class="btn btn-sm btn-outline">Reset (11–40T)</button>
+                <span class="active-count-text">Active: <strong id="modal-active-count">30</strong> of 30</span>
+            </div>
+            <div class="gear-teeth-grid" id="teeth-matrix" role="group" aria-label="Available gear sizes">
+                <!-- Dynamically generated 11 to 40 buttons -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btn-save-inventory" class="btn btn-primary">Done</button>
+            </div>
+        </div>
+    </dialog>
+
+    <footer class="app-footer">
+        <p>Gear Reduction Solver &bull; 100% Client-Side WebAssembly Engine &bull; Zero Server Computation</p>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
