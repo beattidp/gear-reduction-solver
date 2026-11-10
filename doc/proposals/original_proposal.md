@@ -1,0 +1,44 @@
+# Original Proposal
+
+Source: `.proposal`
+
+```
+Gear Reduction Solver:
+ (for use in gear train design).
+
+An application to calculate gear reduction solutions based on user-defined parameters using a list of available gears.
+
+The application should be able to find optimal gear trains, considering factors like target ratio, available parts, and relative cost.
+  
+If no exact solution is possible using the provided gears and constraints, do not provide approximate solutions unless the user has enabled allowing them.
+
+If allowing approximate solutions, find solutions with an achieved ratio that is as CLOSE as possible to the target ratio. For each approximate solution, you MUST calculate and include the 'deviationPercentage'. The deviation percentage is calculated as: |(achievedRatio - targetRatio) / targetRatio| * 100, formatted as a string to two decimal places followed by a '%' sign (e.g., "0.52%").
+
+    Costing Model:
+    - The cost of a solution is calculated by the sum of teeth of all gears used, plus a penalty of 50 for each gear pair (stage) in the train.
+    - Your goal is to find solutions that meet the ratio requirement while minimizing this cost.
+
+  Input parameters:
+    - Target reduction ratio  [ in ] : [ out ]
+    - Maximum number of solutions to find, defaults to 3
+    - an option to use a worm to drive first gear which in this case is assumed to be a worm gear.
+    - Available pinion and gear sizes (by number of teeth):
+       a list of gear sizes to use, plus 
+       a selection dialog with 11 to 40 teeth (11T, 12T, ... 40T), with all enabled by default
+    - Initial minimum gear size is 11 teeth, and maximum gear size is 40 teeth.
+      This could potentially be configurable with JSON configuration file.
+
+    
+    Output Requirements:
+
+    - For each solution, provide the sequence of gear pairs (pinion and gear).
+    - The order of gear pair stages is irrelevant to the final ratio. Provide only one unique solution for any combination of stages that have identical gear pairs.
+    To ensure uniqueness, sort the gear pairs within each solution in ascending order by pinion tooth count. The only exception is if a worm drive is used; the worm drive stage must always be the first pair in the list.
+    - For each solution, calculate the actual achieved reduction ratio.
+    - For each solution, calculate a relative cost weight.
+    The lowest cost solution should have a weight of 1.0. Other solutions should have a weight relative to the lowest cost solution, calculated as (current_solution_cost / lowest_solution_cost).
+    - Sort the final list of solutions from lowest relativeCost to highest relativeCost.
+    - A pinion must be smaller than or equal to the gear it meshes with.
+    - Do not use any gear size that is not in the provided list of available sizes.
+    - If a worm drive is used, the first gear pair must reflect that (e.g., {pinion: 1, gear: selectedWormGear}), and its reduction contributes to the total.
+```
