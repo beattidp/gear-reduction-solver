@@ -37,4 +37,6 @@ If allowing approximate solutions, find solutions with an achieved ratio that is
     - Do not use any gear size that is not in the provided list of available sizes.
     - If a worm drive is used, the first gear pair must reflect that (e.g., {pinion: 1, gear: selectedWormGear}), and its reduction contributes to the total.
 
-
+To provide a more comprehensive set of alternative solutions, consider planetary gear configuration as an additional solver:
+The stator can be (1) the outer ring, (2) the planet gears (stationary pins on the planet gears), or (3) the sun.
+The other two of these three will be the input and the output.

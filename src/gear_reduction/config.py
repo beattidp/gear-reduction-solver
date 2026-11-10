@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
 from .core.models import CostModel
+from .core.planetary import PlanetaryCostModel
 
 
 @dataclass(slots=True)
@@ -20,10 +21,14 @@ class SolverConfig:
         default_factory=lambda: list(range(11, 41))
     )
     cost_model: CostModel = field(default_factory=CostModel)
+    planetary_cost_model: PlanetaryCostModel = field(default_factory=PlanetaryCostModel)
     max_solutions: int = 3
     max_stages: int = 4
     allow_approximate: bool = False
     use_worm: bool = False
+    max_ring_teeth: int = 120
+    planets_count: int = 3
+    strict_ring_inventory: bool = False
 
     @classmethod
     def load(cls, config_path: str | Path | None = None) -> SolverConfig:
@@ -61,16 +66,27 @@ class SolverConfig:
                 worm_gear_multiplier=cm_data.get("worm_gear_multiplier", 3.0),
             )
 
+            pcm_data = data.get("planetary_cost_model", {})
+            planetary_cost_model = PlanetaryCostModel(
+                ring_multiplier=pcm_data.get("ring_multiplier", 1.5),
+                stage_penalty=pcm_data.get("stage_penalty", 60),
+                teeth_multiplier=pcm_data.get("teeth_multiplier", 1.0),
+            )
+
             sd_data = data.get("solver_defaults", {})
             return cls(
                 min_gear_teeth=min_t,
                 max_gear_teeth=max_t,
                 default_enabled_teeth=sorted(enabled),
                 cost_model=cost_model,
+                planetary_cost_model=planetary_cost_model,
                 max_solutions=sd_data.get("max_solutions", 3),
                 max_stages=sd_data.get("max_stages", 4),
                 allow_approximate=sd_data.get("allow_approximate", False),
                 use_worm=sd_data.get("use_worm", False),
+                max_ring_teeth=data.get("max_ring_teeth", 120),
+                planets_count=data.get("planets_count", 3),
+                strict_ring_inventory=data.get("strict_ring_inventory", False),
             )
         except Exception:
             return cls()

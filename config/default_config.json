@@ -11,6 +11,14 @@
     "teeth_multiplier": 1.0,
     "worm_gear_multiplier": 3.0
   },
+  "planetary_cost_model": {
+    "ring_multiplier": 1.5,
+    "stage_penalty": 60,
+    "teeth_multiplier": 1.0
+  },
+  "max_ring_teeth": 120,
+  "planets_count": 3,
+  "strict_ring_inventory": false,
   "solver_defaults": {
     "max_solutions": 3,
     "max_stages": 4,
