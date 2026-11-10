@@ -37,9 +37,10 @@ Represents an individual reduction stage:
 * `teeth_sum: int`: $P + G$.
 
 ### `CostModel`
-Fabrication & assembly penalty formula:
-$$\text{Cost} = \sum_{i=1}^k (P_i + G_i) + (\text{stage\_penalty} \times k)$$
+Fabrication & assembly penalty formula with worm gear weighting:
+$$\text{Cost} = \sum_{\text{spur}} (P_i + G_i) + \sum_{\text{worm}} (P_{\text{worm}} + \text{round}(M_{\text{worm}} \times G_{\text{worm}})) + (\text{stage\_penalty} \times k)$$
 * Default `stage_penalty` $= 50$.
+* Default `worm_gear_multiplier` ($M_{\text{worm}}$) $= 3.0\times$: Accounts for the higher manufacturing cost of specialty bronze alloys, throated hobbing, and larger gearbox envelope sizes for worm wheels, naturally favoring compact worm gears.
 
 ### `ReductionSolution`
 Represents a multi-stage gear train:
@@ -53,7 +54,9 @@ Represents a multi-stage gear train:
 * `is_approximate: bool`: True when achieved ratio deviates from target ratio.
 * `deviation_percentage: str`: Formatted string `X.XX%`:
   $$\text{deviationPercentage} = \left|\frac{\text{achievedRatio} - \text{targetRatio}}{\text{targetRatio}}\right| \times 100\%$$
-* `canonical_stage_key()`: Hashable stage signature to deduplicate stage permutations (since stage order is commutative).
+* `canonical_stage_key()`: Hashable stage signature to deduplicate identical stage sets.
+* `canonical_parts_key()`: Identifies the physical multiset of gears required. Deduplicates solutions that use identical gear collections (e.g. `{11, 12, 33, 40}`), keeping only the optimal progressive torque arrangement ($P_1 \le P_2$ and $G_1 \le G_2$).
+* `progression_penalty()`: Evaluates mechanical torque progression to favor monotonically increasing tooth and gear sizes.
 
 ---
 
@@ -62,15 +65,17 @@ Represents a multi-stage gear train:
 ### High-Performance Combinatorial Search
 1. **Meet-in-the-Middle Indexing**:
    * Pre-indexes 1-stage ($D_1$) and 2-stage ($D_2$) spur ratios into exact `Fraction` lookup tables with cost-sorted candidate stages.
+   * Disallows $P == G$ ($1:1$) dummy stages in multi-stage reduction trains ($P < G$ enforced).
    * Cached globally per available tooth set (`_INDEX_CACHE`) for instant reuse.
-2. **Branch-and-Bound Depth Pruning**:
-   * Progressive deepening over stages $k \in [1, 4]$.
-   * Theoretical minimum cost at depth $k$: $\text{min\_cost}(k) = k \times (2 \times \min(T) + 50)$.
-   * If shallower stages have already found `max_solutions` exact solutions whose costs are lower than $\text{min\_cost}(k)$, deeper searches are pruned immediately.
-3. **Exact Solver**:
+2. **Minimal Stage Depth Return**:
+   * Compound gear trains strictly increase in cost, backlash, and mechanical complexity with each additional stage.
+   * If exact solutions are found at depth $k$, the search returns immediately, preventing the introduction of artificial cancellation stages or dummy stages.
+3. **Multiset Parts Deduplication**:
+   * Solutions sharing identical physical parts collections are deduplicated, keeping only the configuration with optimal torque progression.
+4. **Exact Solver**:
    * Worm stage (if enabled) is evaluated at stage 1, querying $D_1$ and $D_2$ for the remainder $R / G_{\text{worm}}$.
    * Spur trains query $D_1$ ($k=1$), $D_2$ ($k=2$), $D_1 \times D_2$ ($k=3$), and $D_2 \times D_2$ ($k=4$) in $O(1)$ dictionary lookups.
-4. **Approximate Solver**:
+5. **Approximate Solver**:
    * Triggered only if `allow_approximate=True` and no exact solution exists.
    * Performs nearest-neighbor binary search (`bisect`) on sorted ratio floats.
    * Sorts solutions by minimum error, calculates relative costs, and outputs ascending by relative cost.

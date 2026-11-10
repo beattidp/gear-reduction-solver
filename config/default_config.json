@@ -8,7 +8,8 @@
   ],
   "cost_model": {
     "stage_penalty": 50,
-    "teeth_multiplier": 1.0
+    "teeth_multiplier": 1.0,
+    "worm_gear_multiplier": 3.0
   },
   "solver_defaults": {
     "max_solutions": 3,

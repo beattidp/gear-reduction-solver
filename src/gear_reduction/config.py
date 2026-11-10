@@ -58,6 +58,7 @@ class SolverConfig:
             cost_model = CostModel(
                 stage_penalty=cm_data.get("stage_penalty", 50),
                 teeth_multiplier=cm_data.get("teeth_multiplier", 1.0),
+                worm_gear_multiplier=cm_data.get("worm_gear_multiplier", 3.0),
             )
 
             sd_data = data.get("solver_defaults", {})

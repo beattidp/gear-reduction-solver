@@ -123,6 +123,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to custom JSON configuration file.",
     )
     parser.add_argument(
+        "--worm-multiplier",
+        type=float,
+        help="Cost weighting factor for worm wheel teeth (default: 3.0, favors smaller worm gears).",
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Output results in JSON format.",
@@ -136,11 +141,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.teeth:
             available_teeth = parse_teeth_arg(args.teeth)
 
+        cost_model = cfg.cost_model
+        if args.worm_multiplier is not None:
+            cost_model = CostModel(
+                stage_penalty=cfg.cost_model.stage_penalty,
+                teeth_multiplier=cfg.cost_model.teeth_multiplier,
+                worm_gear_multiplier=args.worm_multiplier,
+            )
+
         target_frac = parse_ratio(args.ratio)
 
         solver = ReductionSolver(
             available_teeth=available_teeth,
-            cost_model=cfg.cost_model,
+            cost_model=cost_model,
             max_stages=args.max_stages,
         )
 

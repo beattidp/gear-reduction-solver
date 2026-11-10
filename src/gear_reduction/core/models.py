@@ -82,21 +82,37 @@ class CostModel:
     ----------------------------
     The cost of a solution is calculated by the sum of teeth of all gears used,
     plus a penalty of 50 for each gear pair (stage) in the train:
-        Cost = sum(P_i + G_i) + (50 * stage_count)
+        Cost = sum(teeth_cost) + (50 * stage_count)
+
+    Engineering Rationale for Worm Gear Weighting:
+    ----------------------------------------------
+    Worm wheels (gears) typically require specialty bronze alloys (e.g. SAE 65)
+    to prevent galling against steel worm screws, require specialized throated hobbing,
+    and enlarge gearbox envelope sizes. Therefore, worm wheel teeth are weighted by
+    `worm_gear_multiplier` (default: 3.0x) so that smaller worm gears are naturally
+    favored in relative cost calculations.
 
     Attributes:
         stage_penalty: Flat penalty added per stage to penalize excessive stages/shafts.
         teeth_multiplier: Scaling factor for teeth count sum (default 1.0).
+        worm_gear_multiplier: Cost multiplier for worm wheel teeth (default 3.0).
     """
 
     stage_penalty: int = 50
     teeth_multiplier: float = 1.0
+    worm_gear_multiplier: float = 3.0
 
     def compute_cost(self, stages: Sequence[GearPair]) -> int:
         """Calculates the absolute integer cost for a given sequence of gear pairs."""
-        teeth_sum = sum(stage.teeth_sum for stage in stages)
+        teeth_cost = 0.0
+        for stage in stages:
+            if stage.is_worm:
+                teeth_cost += stage.pinion + (self.worm_gear_multiplier * stage.gear)
+            else:
+                teeth_cost += (stage.pinion + stage.gear) * self.teeth_multiplier
+
         stages_penalty = self.stage_penalty * len(stages)
-        return int(round(teeth_sum * self.teeth_multiplier)) + stages_penalty
+        return int(round(teeth_cost)) + stages_penalty
 
 
 @dataclass(slots=True)
@@ -188,6 +204,52 @@ class ReductionSolution:
             )
         )
         return worm_keys + spur_keys
+
+    def canonical_parts_key(self) -> tuple[int | None, tuple[int, ...], tuple[int, ...]]:
+        """Returns a hashable signature representing the physical multiset of gears required.
+
+        Engineering Rationale:
+        ---------------------
+        Any solution that requires the exact same physical gear inventory
+        (e.g. pinions {11, 12} and gears {33, 40}) is physically equivalent in bill of materials.
+        To avoid cluttering results with identical parts permutations, solutions sharing the same
+        parts signature are deduplicated, keeping only the optimal progressive torque arrangement.
+        """
+        worm_gears = tuple(s.gear for s in self.stages if s.is_worm)
+        worm_wheel = worm_gears[0] if worm_gears else None
+        spur_pinions = tuple(sorted(s.pinion for s in self.stages if not s.is_worm))
+        spur_gears = tuple(sorted(s.gear for s in self.stages if not s.is_worm))
+        return (worm_wheel, spur_pinions, spur_gears)
+
+    def progression_penalty(self) -> tuple[int, float]:
+        """Scores how well the stages follow mechanical torque progression.
+
+        In a speed reducer, torque increases at each subsequent stage:
+            Torque_out = Torque_in * R_stage
+        Mechanical guidelines favor:
+        1. Non-decreasing driven gear sizes (G_1 <= G_2 <= ...) to withstand higher tangential tooth load.
+        2. Non-decreasing pinion sizes (P_1 <= P_2 <= ...).
+
+        Returns:
+            (inversion_count, ratio_decrease_penalty)
+            Lower values indicate superior mechanical progression.
+        """
+        spur_stages = [s for s in self.stages if not s.is_worm]
+        if len(spur_stages) <= 1:
+            return (0, 0.0)
+
+        inversions = 0
+        ratio_penalty = 0.0
+        for i in range(len(spur_stages) - 1):
+            if spur_stages[i].gear > spur_stages[i + 1].gear:
+                inversions += 1
+            r1 = float(spur_stages[i].ratio)
+            r2 = float(spur_stages[i + 1].ratio)
+            if r1 > r2:
+                ratio_penalty += (r1 - r2)
+
+        return (inversions, ratio_penalty)
+
 
     def to_dict(self) -> dict[str, Any]:
         """Serializes solution to standard JSON-compatible dictionary."""

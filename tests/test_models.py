@@ -63,11 +63,18 @@ class TestCostModel:
         stages = [GearPair(12, 24), GearPair(15, 30)]
         assert cm.compute_cost(stages) == 181
 
-    def test_worm_stage_cost(self) -> None:
-        # Worm: 1T + 30T = 31. Spur: 12T + 24T = 36. Teeth sum = 67. 2 stages * 50 = 100. Total = 167.
-        cm = CostModel(stage_penalty=50)
+    def test_worm_stage_cost_with_multiplier(self) -> None:
+        # Default worm multiplier 3.0: Worm 1T + 3.0 * 30T = 91. Spur: 12T + 24T = 36. Teeth = 127. 2 stages * 50 = 100. Total = 227.
+        cm = CostModel(stage_penalty=50, worm_gear_multiplier=3.0)
+        stages = [GearPair(1, 30, is_worm=True), GearPair(12, 24)]
+        assert cm.compute_cost(stages) == 227
+
+    def test_worm_stage_cost_unweighted(self) -> None:
+        # With worm multiplier 1.0: Worm 1T + 30T = 31. Spur: 12T + 24T = 36. Teeth = 67. 2 stages * 50 = 100. Total = 167.
+        cm = CostModel(stage_penalty=50, worm_gear_multiplier=1.0)
         stages = [GearPair(1, 30, is_worm=True), GearPair(12, 24)]
         assert cm.compute_cost(stages) == 167
+
 
 
 class TestReductionSolution:

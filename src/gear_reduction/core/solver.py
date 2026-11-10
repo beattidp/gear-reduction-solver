@@ -171,11 +171,11 @@ class ReductionSolver:
         self.min_tooth = self.available_teeth[0]
         self.max_tooth = self.available_teeth[-1]
 
-        # Generate candidate gear pairs
+        # Generate candidate gear pairs (strict inequality p < g for speed reduction)
         self._spur_pairs: list[GearPair] = []
         for p in self.available_teeth:
             for g in self.available_teeth:
-                if p <= g:
+                if p < g:
                     self._spur_pairs.append(GearPair(pinion=p, gear=g, is_worm=False))
 
         # Sort candidate spur pairs by cost ascending
@@ -219,6 +219,13 @@ class ReductionSolver:
         """Calculates optimal gear train solutions meeting or approximating the target ratio."""
         target_frac = parse_ratio(target_ratio)
 
+        # Handle 1:1 direct ratio (pinion == gear single stage)
+        if target_frac == Fraction(1, 1) and not use_worm:
+            sol = ReductionSolution.create(
+                (GearPair(self.min_tooth, self.min_tooth),), self.cost_model, target_frac
+            )
+            return [sol]
+
         # 1. Search for Exact Solutions
         exact_solutions = self._find_exact_solutions(target_frac, use_worm, max_solutions)
 
@@ -238,32 +245,32 @@ class ReductionSolver:
     def _find_exact_solutions(
         self, target_frac: Fraction, use_worm: bool, max_solutions: int
     ) -> list[ReductionSolution]:
-        """Performs exact rational matching with branch-and-bound stage pruning."""
+        """Performs exact rational matching with progressive stage deepening.
+
+        Engineering Rationale:
+        ---------------------
+        Compound gear trains strictly increase in cost and mechanical complexity
+        (shafts, backlash, friction) with each additional stage. If exact solutions
+        exist at stage depth k, any solution at depth k+1 is guaranteed to have a higher
+        cost and introduces redundant cancellation stages. Therefore, once exact solutions
+        are found at the minimal achievable depth k, the search returns immediately.
+        """
         found_solutions: list[ReductionSolution] = []
 
-        def can_prune_stage(depth: int) -> bool:
-            """Checks whether depth can beat current top solutions."""
-            if len(found_solutions) >= max_solutions:
-                # Find the maximum cost among the top max_solutions
-                top_costs = sorted(s.cost for s in found_solutions)[:max_solutions]
-                max_top_cost = top_costs[-1]
-                if self._min_stage_cost(depth, use_worm) > max_top_cost:
-                    return True
-            return False
-
         if use_worm:
-            for worm_pair in self._worm_pairs:
-                worm_ratio = worm_pair.ratio
-                rem_ratio = target_frac / worm_ratio
-
-                # Depth 1: Worm alone
-                if self.max_stages >= 1 and rem_ratio == Fraction(1, 1):
-                    found_solutions.append(
-                        ReductionSolution.create((worm_pair,), self.cost_model, target_frac)
-                    )
+            # Depth 1: Worm alone
+            if self.max_stages >= 1:
+                for worm_pair in self._worm_pairs:
+                    rem_ratio = target_frac / worm_pair.ratio
+                    if rem_ratio == Fraction(1, 1):
+                        found_solutions.append(
+                            ReductionSolution.create((worm_pair,), self.cost_model, target_frac)
+                        )
+                if found_solutions:
+                    return found_solutions
 
             # Depth 2: Worm + 1 spur stage
-            if self.max_stages >= 2 and not can_prune_stage(2):
+            if self.max_stages >= 2:
                 for worm_pair in self._worm_pairs:
                     rem_ratio = target_frac / worm_pair.ratio
                     if rem_ratio in self._d1:
@@ -271,9 +278,11 @@ class ReductionSolver:
                             found_solutions.append(
                                 ReductionSolution.create((worm_pair,) + s1, self.cost_model, target_frac)
                             )
+                if found_solutions:
+                    return found_solutions
 
             # Depth 3: Worm + 2 spur stages
-            if self.max_stages >= 3 and not can_prune_stage(3):
+            if self.max_stages >= 3:
                 for worm_pair in self._worm_pairs:
                     rem_ratio = target_frac / worm_pair.ratio
                     if rem_ratio in self._d2:
@@ -281,9 +290,11 @@ class ReductionSolver:
                             found_solutions.append(
                                 ReductionSolution.create((worm_pair,) + s2, self.cost_model, target_frac)
                             )
+                if found_solutions:
+                    return found_solutions
 
-            # Depth 4: Worm + 3 spur stages (1 spur from d1 + 2 spurs from d2)
-            if self.max_stages >= 4 and not can_prune_stage(4):
+            # Depth 4: Worm + 3 spur stages
+            if self.max_stages >= 4:
                 for worm_pair in self._worm_pairs:
                     rem_ratio = target_frac / worm_pair.ratio
                     for r1, s1_list in self._d1.items():
@@ -294,6 +305,8 @@ class ReductionSolver:
                                     found_solutions.append(
                                         ReductionSolution.create((worm_pair,) + s1 + s2, self.cost_model, target_frac)
                                     )
+                if found_solutions:
+                    return found_solutions
 
         else:
             # Spur gear trains only
@@ -303,17 +316,20 @@ class ReductionSolver:
                     found_solutions.append(
                         ReductionSolution.create(s1, self.cost_model, target_frac)
                     )
+                if found_solutions:
+                    return found_solutions
 
             # Depth 2
-            if self.max_stages >= 2 and not can_prune_stage(2):
-                if target_frac in self._d2:
-                    for s2 in self._d2[target_frac]:
-                        found_solutions.append(
-                            ReductionSolution.create(s2, self.cost_model, target_frac)
-                        )
+            if self.max_stages >= 2 and target_frac in self._d2:
+                for s2 in self._d2[target_frac]:
+                    found_solutions.append(
+                        ReductionSolution.create(s2, self.cost_model, target_frac)
+                    )
+                if found_solutions:
+                    return found_solutions
 
             # Depth 3
-            if self.max_stages >= 3 and not can_prune_stage(3):
+            if self.max_stages >= 3:
                 for r1, s1_list in self._d1.items():
                     needed_r2 = target_frac / r1
                     if needed_r2 in self._d2:
@@ -322,9 +338,11 @@ class ReductionSolver:
                                 found_solutions.append(
                                     ReductionSolution.create(s1 + s2, self.cost_model, target_frac)
                                 )
+                if found_solutions:
+                    return found_solutions
 
             # Depth 4
-            if self.max_stages >= 4 and not can_prune_stage(4):
+            if self.max_stages >= 4:
                 for r2_a, s2_a_list in self._d2.items():
                     needed_r2_b = target_frac / r2_a
                     if needed_r2_b in self._d2 and r2_a <= needed_r2_b:
@@ -333,6 +351,10 @@ class ReductionSolver:
                                 found_solutions.append(
                                     ReductionSolution.create(s2_a + s2_b, self.cost_model, target_frac)
                                 )
+                if found_solutions:
+                    return found_solutions
+
+        return found_solutions
 
         return found_solutions
 
@@ -451,17 +473,41 @@ class ReductionSolver:
     def _rank_and_format_solutions(
         self, solutions: Sequence[ReductionSolution], max_solutions: int
     ) -> list[ReductionSolution]:
-        """Deduplicates, computes relative costs, and formats top solutions."""
+        """Deduplicates, computes relative costs, and formats top solutions.
+
+        Engineering Rationale:
+        ---------------------
+        1. Exact Stage Multiset Deduplication: Eliminates identical stage permutations.
+        2. Physical Parts Deduplication: If two solutions use the exact same collection of
+           physical gears (e.g. pinions {11, 12} and gears {33, 40}), they share the exact same
+           purchased parts bill-of-materials. Only the mechanically optimal progressive
+           arrangement (non-decreasing pinions and non-decreasing driven gears) is retained.
+        """
         if not solutions:
             return []
 
-        unique_map: dict[tuple[tuple[int, int, bool], ...], ReductionSolution] = {}
+        # Step 1: Deduplicate by exact stage combination
+        stage_map: dict[tuple[tuple[int, int, bool], ...], ReductionSolution] = {}
         for sol in solutions:
             key = sol.canonical_stage_key()
-            if key not in unique_map or sol.cost < unique_map[key].cost:
-                unique_map[key] = sol
+            if key not in stage_map or sol.cost < stage_map[key].cost:
+                stage_map[key] = sol
 
-        unique_solutions = list(unique_map.values())
+        # Step 2: Deduplicate by physical parts bill-of-materials multiset
+        parts_map: dict[tuple[int | None, tuple[int, ...], tuple[int, ...]], ReductionSolution] = {}
+        for sol in stage_map.values():
+            pkey = sol.canonical_parts_key()
+            if pkey not in parts_map:
+                parts_map[pkey] = sol
+            else:
+                existing = parts_map[pkey]
+                # Lower progression penalty represents superior progressive torque distribution
+                if sol.progression_penalty() < existing.progression_penalty():
+                    parts_map[pkey] = sol
+                elif sol.progression_penalty() == existing.progression_penalty() and sol.cost < existing.cost:
+                    parts_map[pkey] = sol
+
+        unique_solutions = list(parts_map.values())
         if not unique_solutions:
             return []
 
@@ -472,12 +518,19 @@ class ReductionSolver:
                     if s.deviation_percentage
                     else 0.0,
                     s.cost,
+                    s.progression_penalty(),
                     len(s.stages),
                 )
             )
             selected = unique_solutions[:max_solutions]
         else:
-            unique_solutions.sort(key=lambda s: (s.cost, len(s.stages)))
+            unique_solutions.sort(
+                key=lambda s: (
+                    s.cost,
+                    s.progression_penalty(),
+                    len(s.stages),
+                )
+            )
             selected = unique_solutions[:max_solutions]
 
         lowest_cost = min(sol.cost for sol in selected)
@@ -486,5 +539,6 @@ class ReductionSolver:
                 sol.cost / lowest_cost if lowest_cost > 0 else 1.0
             )
 
-        selected.sort(key=lambda s: (s.relative_cost, s.cost, len(s.stages)))
+        selected.sort(key=lambda s: (s.relative_cost, s.cost, s.progression_penalty(), len(s.stages)))
         return selected
+

@@ -88,7 +88,7 @@ class TestExactSolver:
             seen_keys.add(key)
 
     def test_worm_drive_exact_solution(self, standard_solver: ReductionSolver) -> None:
-        """With worm drive, ratio 60:1 can be achieved by Worm(30T) * (12T->24T)."""
+        """With worm drive, ratio 60:1 can be achieved by Worm(20T) * (11T->33T)."""
         solutions = standard_solver.solve(
             target_ratio="60:1", use_worm=True, max_solutions=3
         )
@@ -101,6 +101,65 @@ class TestExactSolver:
             assert first_stage.pinion == 1
             assert 11 <= first_stage.gear <= 40
 
+    def test_worm_sizing_prioritizes_smaller_worm_wheel(
+        self, standard_solver: ReductionSolver
+    ) -> None:
+        """With worm gear weighting (default 3.0x), smaller worm gears must be ranked cheaper.
+
+        For 60:1 with worm:
+        Solution 1 must use the 20T worm wheel (cheapest), not the 22T or 30T.
+        """
+        solutions = standard_solver.solve(
+            target_ratio="60:1", use_worm=True, max_solutions=3
+        )
+        assert len(solutions) >= 3
+        # Top solutions prioritize compact worm wheels (20T, 18T, 22T) over 30T
+        worm_gears = [s.stages[0].gear for s in solutions]
+        assert worm_gears == [20, 18, 22]
+        assert solutions[0].relative_cost == 1.0
+        for i in range(len(solutions) - 1):
+            assert solutions[i].relative_cost <= solutions[i + 1].relative_cost
+
+
+    def test_worm_clean_exact_solution_no_dummy_stages(
+        self, standard_solver: ReductionSolver
+    ) -> None:
+        """For 31:1 with worm, 31 is prime and achievable in 1 stage.
+
+        The solver must return ONLY the single 1-stage solution [Worm(1T) -> 31T].
+        It must NOT pad with 11T cancellation stages or 1:1 dummy stages.
+        """
+        solutions = standard_solver.solve(
+            target_ratio="31:1", use_worm=True, max_solutions=3
+        )
+        assert len(solutions) == 1
+        sol = solutions[0]
+        assert len(sol.stages) == 1
+        assert sol.stages[0].is_worm is True
+        assert sol.stages[0].gear == 31
+        assert sol.achieved_ratio == Fraction(31, 1)
+
+    def test_parts_multiset_deduplication_and_torque_progression(
+        self, standard_solver: ReductionSolver
+    ) -> None:
+        """For 10:1, solutions must not return different permutations of the same gear set.
+
+        Between [11->33][12->40] and [11->40][12->33], only the progressive torque
+        arrangement [11->33][12->40] where pinions and driven gears are non-decreasing
+        must be returned.
+        """
+        solutions = standard_solver.solve(target_ratio="10:1", max_solutions=3)
+        assert len(solutions) >= 2
+
+        # Check all solutions have distinct physical gear sets
+        parts_keys = [sol.canonical_parts_key() for sol in solutions]
+        assert len(parts_keys) == len(set(parts_keys)), "Duplicate gear sets found!"
+
+        # First solution must be [11->33][12->40] (progressive)
+        sol1 = solutions[0]
+        assert sol1.stages[0].pinion == 11 and sol1.stages[0].gear == 33
+        assert sol1.stages[1].pinion == 12 and sol1.stages[1].gear == 40
+
     def test_no_exact_solution_returns_empty_when_approx_disabled(
         self, standard_solver: ReductionSolver
     ) -> None:
@@ -109,3 +168,4 @@ class TestExactSolver:
             target_ratio="71:1", allow_approximate=False
         )
         assert solutions == []
+
