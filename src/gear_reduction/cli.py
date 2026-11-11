@@ -126,8 +126,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "-r",
         "--ratio",
-        required=True,
-        help="Target reduction ratio (e.g. '10:1', '25:2', '12.5').",
+        default=None,
+        help="Target reduction ratio (e.g. '10:1', '1:4', '25:2', '1/4', '12.5'). Values < 1 automatically invert to speed reduction.",
     )
     parser.add_argument(
         "-w",
@@ -153,17 +153,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--max-stages",
         type=int,
         default=4,
-        help="Maximum number of gear stages to consider (default: 4).",
+        help="Maximum number of gear stages to consider (1-6 for spur, 1-4 for planetary; default: 4).",
     )
     parser.add_argument(
         "-t",
         "--teeth",
-        help="Available gear teeth (e.g. '11-40' or '11,12,14,16,20,24,30,40'). Defaults to 11-40.",
+        help="Available gear teeth (e.g. '9-40', '9-40,52', or '12,16,24,32'). Defaults to configured inventory.",
     )
     parser.add_argument(
         "-c",
         "--config",
         help="Path to custom JSON configuration file.",
+    )
+    parser.add_argument(
+        "--config-show",
+        action="store_true",
+        help="Print active JSON configuration and exit.",
+    )
+    parser.add_argument(
+        "--config-export",
+        metavar="PATH",
+        help="Export active configuration to specified JSON file and exit.",
     )
     parser.add_argument(
         "--worm-multiplier",
@@ -220,6 +230,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         cfg = SolverConfig.load(args.config)
+
+        if args.config_show:
+            print(json.dumps(cfg.to_dict(), indent=2))
+            return 0
+
+        if args.config_export:
+            cfg.save(args.config_export)
+            print(f"Configuration exported to {args.config_export}")
+            return 0
+
+        if not args.ratio:
+            parser.error("the following arguments are required: -r/--ratio")
+
         available_teeth = cfg.default_enabled_teeth
         if args.teeth:
             available_teeth = parse_teeth_arg(args.teeth)

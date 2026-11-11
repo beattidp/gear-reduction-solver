@@ -6,7 +6,7 @@ Through close inspection of the current UI and solver backend, several usability
 2. **Reduction Ratio Interpretation**: In speed reduction contexts, ratios are frequently entered as `output:input` (e.g. `1:4` or `1/4` or `0.25`), representing the speed fraction. Currently, values $< 1$ either raise errors or return zero results. The system should interpret fractions or ratios $< 1$ as the inverse reduction ($1 / \text{ratio}$), so `1:4` is automatically resolved as a `4:1` (4x) reduction.
 3. **Known vs. Available Gear Inventory**: Gear sizes need clear separation between:
    - **Known Gears (`known_gear_teeth`)**: The catalog of recognized physical gear sizes. This default should be expanded to include common **9T and 10T** gears (defaulting to 9T through 40T).
-   - **Available Gears (`available_gear_teeth`)**: The active subset of known gears selected for a given calculation.
+   - **Available Gears (`available_gear_teeth`)**: The active subset of known gears selected for a given and subsequent calculations (persisted across sessions).
    - **Custom Non-Contiguous Sizes**: The ability to define arbitrary additional sizes (e.g. 52T without needing 41T to 51T).
    - **JSON Configuration & Web Sync**: Means to import/export and persist JSON configuration in the backend and web interface.
 

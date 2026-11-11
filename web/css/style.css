@@ -678,6 +678,63 @@ dialog::backdrop {
     color: var(--text-primary);
 }
 
+.ratio-interpretation-hint {
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    min-height: 1.2rem;
+    transition: opacity 0.2s ease;
+}
+
+.ratio-interpretation-hint:empty {
+    display: none;
+}
+
+.custom-gear-section {
+    padding: 0.85rem 1.5rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.custom-gear-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.custom-gear-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.custom-gear-input-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    max-width: 280px;
+}
+
+.custom-tooth-input {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    width: 110px;
+}
+
+.custom-tooth-feedback {
+    font-size: 0.8rem;
+    min-height: 1rem;
+}
+
+.custom-tooth-feedback.success {
+    color: var(--success);
+}
+
+.custom-tooth-feedback.error {
+    color: var(--danger);
+}
+
 .modal-toolbar {
     padding: 0.75rem 1.5rem;
     background: var(--bg-input);
@@ -686,12 +743,20 @@ dialog::backdrop {
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.toolbar-buttons {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
 
 .active-count-text {
-    margin-left: auto;
     font-size: 0.85rem;
     color: var(--text-secondary);
+    white-space: nowrap;
 }
 
 .gear-teeth-grid {
@@ -709,7 +774,14 @@ dialog::backdrop {
     }
 }
 
+.btn-tooth-wrapper {
+    position: relative;
+    display: inline-flex;
+    width: 100%;
+}
+
 .btn-tooth {
+    width: 100%;
     background: var(--bg-input);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
@@ -721,6 +793,36 @@ dialog::backdrop {
     cursor: pointer;
     transition: all 0.15s ease;
     text-align: center;
+}
+
+.btn-tooth.is-custom {
+    border-style: dashed;
+}
+
+.btn-remove-custom-tooth {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 18px;
+    height: 18px;
+    background: var(--danger);
+    color: #ffffff;
+    border-radius: 50%;
+    border: 2px solid var(--bg-surface);
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 5;
+    transition: transform 0.15s ease;
+}
+
+.btn-remove-custom-tooth:hover {
+    transform: scale(1.15);
+    background: #dc2626;
 }
 
 .btn-tooth.active {

@@ -40,3 +40,9 @@ If allowing approximate solutions, find solutions with an achieved ratio that is
 To provide a more comprehensive set of alternative solutions, consider planetary gear configuration as an additional solver:
 The stator can be (1) the outer ring, (2) the planet gears (stationary pins on the planet gears), or (3) the sun.
 The other two of these three will be the input and the output.
+
+ -- -- -- -- -- --
+Future Feature Ideas (as suggested by agent):
+ - adding compound planetary configurations
+ - 2D/3D gear visualization
+ - export formats for CAD (e.g. DXF or FreeCAD scripts)

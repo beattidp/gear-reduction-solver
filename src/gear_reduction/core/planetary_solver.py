@@ -22,6 +22,7 @@ from .planetary import (
     PlanetaryStage,
     PlanetaryStator,
 )
+from .solver import get_prime_factors, parse_ratio
 
 
 class PlanetarySolver:
@@ -91,7 +92,7 @@ class PlanetarySolver:
 
     def solve(
         self,
-        target_ratio: Fraction,
+        target_ratio: Fraction | str | int | float,
         stator: PlanetaryStator | str | None = None,
         allow_approximate: bool = False,
         max_solutions: int = 3,
@@ -99,7 +100,7 @@ class PlanetarySolver:
         """Finds optimal planetary gear reduction solutions for a given target ratio.
 
         Args:
-            target_ratio: Target speed reduction ratio (Fraction, must be > 1.0).
+            target_ratio: Target speed reduction ratio (Fraction, str, float, int; values < 1 inverted).
             stator: Optional filter by stationary member ('ring', 'carrier', 'sun', or None/'any').
             allow_approximate: If True and no exact solution exists, returns closest approximations.
             max_solutions: Maximum number of solutions to return (default: 3).
@@ -107,8 +108,9 @@ class PlanetarySolver:
         Returns:
             List of PlanetarySolution instances, sorted by relative cost.
         """
-        if target_ratio <= 1:
-            raise ValueError(f"Target reduction ratio must be > 1.0, got {target_ratio}")
+        target_frac = parse_ratio(target_ratio)
+        if target_frac <= 1:
+            raise ValueError(f"Target reduction ratio must be > 1.0, got {target_frac}")
 
         # Filter single stages by stator if requested
         stator_enum: PlanetaryStator | None = None
@@ -129,11 +131,38 @@ class PlanetarySolver:
         if not candidate_stages:
             return []
 
+        # Fast prime reachability check:
+        # If target_frac has any prime factor not present in any candidate stage ratio,
+        # an exact solution is provably impossible.
+        stage_primes: set[int] = set()
+        for s in candidate_stages:
+            stage_primes.update(get_prime_factors(s.ratio.numerator))
+            stage_primes.update(get_prime_factors(s.ratio.denominator))
+
+        is_prime_reachable = True
+        for p in get_prime_factors(target_frac.numerator):
+            if p not in stage_primes:
+                is_prime_reachable = False
+                break
+        if is_prime_reachable:
+            for p in get_prime_factors(target_frac.denominator):
+                if p not in stage_primes:
+                    is_prime_reachable = False
+                    break
+
+        if not is_prime_reachable:
+            if not allow_approximate:
+                return []
+            approx_solutions = self._search_approximate(
+                candidate_stages, target_frac, self.max_stages, max_candidates=50
+            )
+            return self._rank_solutions(approx_solutions, max_solutions)
+
         # 1. Search for exact solutions at minimal stage depth
         exact_solutions: list[PlanetarySolution] = []
         for depth in range(1, self.max_stages + 1):
             solutions_at_depth = self._search_exact_depth(
-                candidate_stages, target_ratio, depth
+                candidate_stages, target_frac, depth
             )
             if solutions_at_depth:
                 exact_solutions.extend(solutions_at_depth)
@@ -146,7 +175,7 @@ class PlanetarySolver:
         # 2. Approximate search if enabled and no exact solution found
         if allow_approximate:
             approx_solutions = self._search_approximate(
-                candidate_stages, target_ratio, self.max_stages, max_candidates=50
+                candidate_stages, target_frac, self.max_stages, max_candidates=50
             )
             if approx_solutions:
                 return self._rank_solutions(approx_solutions, max_solutions)
@@ -195,7 +224,58 @@ class PlanetarySolver:
                             solutions.append(sol)
             return solutions
 
-        # For depth >= 3: recursive branch and bound
+        # For depth 3 and 4: Meet-in-the-Middle indexing
+        if depth in (3, 4):
+            d2_map: dict[Fraction, list[tuple[PlanetaryStage, PlanetaryStage]]] = defaultdict(list)
+            n_stages = len(stages)
+            for i in range(n_stages):
+                s1 = stages[i]
+                for j in range(i, n_stages):
+                    s2 = stages[j]
+                    comb_ratio = s1.ratio * s2.ratio
+                    if len(d2_map[comb_ratio]) < 3:
+                        d2_map[comb_ratio].append((s1, s2))
+
+            seen_keys: set[tuple[Any, ...]] = set()
+
+            if depth == 3:
+                for s1 in stages:
+                    needed = target_ratio / s1.ratio
+                    if needed in d2_map:
+                        for s2, s3 in d2_map[needed]:
+                            sol = PlanetarySolution.create(
+                                stages=[s1, s2, s3],
+                                cost_model=self.cost_model,
+                                target_ratio=target_ratio,
+                            )
+                            key = sol.canonical_stage_key()
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                solutions.append(sol)
+                                if len(solutions) >= 10:
+                                    return solutions
+                return solutions
+
+            if depth == 4:
+                for r2_a, combos_a in d2_map.items():
+                    needed = target_ratio / r2_a
+                    if needed in d2_map and r2_a <= needed:
+                        for s1, s2 in combos_a[:1]:
+                            for s3, s4 in d2_map[needed][:1]:
+                                sol = PlanetarySolution.create(
+                                    stages=[s1, s2, s3, s4],
+                                    cost_model=self.cost_model,
+                                    target_ratio=target_ratio,
+                                )
+                                key = sol.canonical_stage_key()
+                                if key not in seen_keys:
+                                    seen_keys.add(key)
+                                    solutions.append(sol)
+                                    if len(solutions) >= 10:
+                                        return solutions
+                return solutions
+
+        # For depth >= 5: recursive branch and bound
         return self._search_exact_recursive(stages, target_ratio, depth)
 
     def _search_exact_recursive(

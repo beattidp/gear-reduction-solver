@@ -53,8 +53,9 @@
                                     Target Reduction Ratio <span class="required">*</span>
                                 </label>
                                 <div class="input-with-presets">
-                                    <input type="text" id="spur-ratio" class="form-input" placeholder="e.g. 10:1, 25:2, 12.5" required autocomplete="off">
+                                    <input type="text" id="spur-ratio" class="form-input" placeholder="e.g. 10:1, 1:4, 25:2, 1/4" required autocomplete="off">
                                 </div>
+                                <div id="spur-ratio-interpretation" class="ratio-interpretation-hint" aria-live="polite"></div>
                                 <div class="presets-row" aria-label="Quick ratio presets">
                                     <span class="preset-label">Presets:</span>
                                     <button type="button" class="btn-preset" data-target="spur-ratio" data-val="4:1">4:1</button>
@@ -72,6 +73,8 @@
                                         <option value="2">2 Stages</option>
                                         <option value="3">3 Stages</option>
                                         <option value="4" selected>4 Stages</option>
+                                        <option value="5">5 Stages (High)</option>
+                                        <option value="6">6 Stages (Ultra-High)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -142,8 +145,9 @@
                                     Target Reduction Ratio <span class="required">*</span>
                                 </label>
                                 <div class="input-with-presets">
-                                    <input type="text" id="planetary-ratio" class="form-input" placeholder="e.g. 4:1, 10:1, 16:1" required autocomplete="off">
+                                    <input type="text" id="planetary-ratio" class="form-input" placeholder="e.g. 4:1, 1:4, 10:1, 16:1" required autocomplete="off">
                                 </div>
+                                <div id="planetary-ratio-interpretation" class="ratio-interpretation-hint" aria-live="polite"></div>
                                 <div class="presets-row" aria-label="Quick planetary presets">
                                     <span class="preset-label">Presets:</span>
                                     <button type="button" class="btn-preset" data-target="planetary-ratio" data-val="3:1">3:1</button>
@@ -190,6 +194,7 @@
                                         <option value="1">1 Stage</option>
                                         <option value="2">2 Stages</option>
                                         <option value="3" selected>3 Stages</option>
+                                        <option value="4">4 Stages</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -254,25 +259,45 @@
         </div>
     </main>
 
-    <!-- Modal Dialog: Gear Tooth Inventory (11T - 40T) -->
+    <!-- Modal Dialog: Gear Teeth Catalog & Inventory -->
     <dialog id="inventory-dialog" class="modal-dialog" aria-labelledby="inventory-title">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
-                    <h2 id="inventory-title" class="modal-title">Gear Teeth Inventory</h2>
-                    <p class="modal-subtitle">Select which gear sizes are available in your physical collection.</p>
+                    <h2 id="inventory-title" class="modal-title">Gear Teeth Catalog &amp; Inventory</h2>
+                    <p class="modal-subtitle">Configure known gear sizes and toggle which are active for calculation. Saved across sessions.</p>
                 </div>
                 <button type="button" id="btn-close-inventory-x" class="modal-close" aria-label="Close dialog">&times;</button>
             </div>
+
+            <!-- Custom Gear Size Input Section -->
+            <div class="custom-gear-section">
+                <form id="form-add-custom-gear" class="custom-gear-form" onsubmit="return false;">
+                    <label for="input-custom-tooth" class="custom-gear-label">Add Custom Gear Size:</label>
+                    <div class="custom-gear-input-group">
+                        <input type="number" id="input-custom-tooth" class="form-input custom-tooth-input" placeholder="e.g. 52" min="2" max="250" step="1">
+                        <button type="submit" id="btn-add-custom-tooth" class="btn btn-sm btn-secondary">+ Add Size</button>
+                    </div>
+                    <span id="custom-tooth-feedback" class="custom-tooth-feedback" role="status" aria-live="polite"></span>
+                </form>
+            </div>
+
             <div class="modal-toolbar">
-                <button type="button" id="btn-select-all-teeth" class="btn btn-sm btn-secondary">Select All</button>
-                <button type="button" id="btn-deselect-all-teeth" class="btn btn-sm btn-secondary">Deselect All</button>
-                <button type="button" id="btn-reset-teeth" class="btn btn-sm btn-outline">Reset (11–40T)</button>
-                <span class="active-count-text">Active: <strong id="modal-active-count">30</strong> of 30</span>
+                <div class="toolbar-buttons">
+                    <button type="button" id="btn-select-all-teeth" class="btn btn-sm btn-secondary">Select All</button>
+                    <button type="button" id="btn-deselect-all-teeth" class="btn btn-sm btn-secondary">Deselect All</button>
+                    <button type="button" id="btn-reset-teeth" class="btn btn-sm btn-outline">Reset (9–40T)</button>
+                    <button type="button" id="btn-export-config" class="btn btn-sm btn-outline" title="Export configuration to JSON file">📥 Export JSON</button>
+                    <button type="button" id="btn-import-config" class="btn btn-sm btn-outline" title="Import configuration from JSON file">📤 Import JSON</button>
+                    <input type="file" id="file-import-config" accept=".json" style="display: none;">
+                </div>
+                <span class="active-count-text">Active: <strong id="modal-active-count">32</strong> of <span id="modal-known-count">32</span> known</span>
             </div>
+
             <div class="gear-teeth-grid" id="teeth-matrix" role="group" aria-label="Available gear sizes">
-                <!-- Dynamically generated 11 to 40 buttons -->
+                <!-- Dynamically generated known gear buttons -->
             </div>
+
             <div class="modal-footer">
                 <button type="button" id="btn-save-inventory" class="btn btn-primary">Done</button>
             </div>

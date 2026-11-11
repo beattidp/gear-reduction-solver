@@ -48,41 +48,109 @@ def parse_ratio(ratio_input: str | int | float | Fraction) -> Fraction:
     """Parses various ratio input formats into an exact Fraction.
 
     Supported Formats:
-        - Ratio string "in:out" (e.g. "10:1", "25:2", "7.5:1")
-        - Fraction string "in/out" (e.g. "10/1", "25/2")
+        - Ratio string "in:out" or "out:in" (e.g. "10:1", "1:10", "25:2", "2:25", "7.5:1")
+        - Fraction string "num/den" (e.g. "10/1", "1/4", "25/2")
         - Integer (e.g. 10 -> Fraction(10, 1))
-        - Float (e.g. 12.5 -> Fraction(25, 2))
+        - Float (e.g. 12.5 -> Fraction(25, 2), 0.25 -> Fraction(4, 1))
         - Existing Fraction instance
+
+    Reduction Normalization:
+        In mechanical speed reduction, the reduction ratio is >= 1.0 (input speed / output speed).
+        If an input represents the inverse speed fraction (e.g. "1:4", "1/4", or 0.25), it is
+        automatically inverted to represent the intended speed reduction ratio (4:1 or Fraction(4, 1)).
     """
+    frac: Fraction
     if isinstance(ratio_input, Fraction):
         if ratio_input <= 0:
             raise ValueError(f"Target ratio must be positive, got {ratio_input}")
-        return ratio_input
+        frac = ratio_input
 
-    if isinstance(ratio_input, (int, float)):
+    elif isinstance(ratio_input, (int, float)):
         if ratio_input <= 0:
             raise ValueError(f"Target ratio must be positive, got {ratio_input}")
-        return Fraction(str(ratio_input))
+        frac = Fraction(str(ratio_input))
 
-    if isinstance(ratio_input, str):
+    elif isinstance(ratio_input, str):
         clean_str = ratio_input.strip()
         if ":" in clean_str or "/" in clean_str:
             parts = re.split(r"[:/]", clean_str)
             if len(parts) != 2:
-                raise ValueError(f"Invalid ratio format '{ratio_input}'. Expected 'in:out'.")
+                raise ValueError(f"Invalid ratio format '{ratio_input}'. Expected 'in:out' or 'num/den'.")
             num_str, den_str = parts[0].strip(), parts[1].strip()
             num_frac = Fraction(num_str)
             den_frac = Fraction(den_str)
             if den_frac <= 0 or num_frac <= 0:
                 raise ValueError("Numerator and denominator in ratio must be positive.")
-            return num_frac / den_frac
+            frac = num_frac / den_frac
+        else:
+            frac = Fraction(clean_str)
+            if frac <= 0:
+                raise ValueError(f"Target ratio must be positive, got {frac}")
 
-        frac = Fraction(clean_str)
-        if frac <= 0:
-            raise ValueError(f"Target ratio must be positive, got {frac}")
-        return frac
+    else:
+        raise TypeError(f"Unsupported ratio input type: {type(ratio_input)}")
 
-    raise TypeError(f"Unsupported ratio input type: {type(ratio_input)}")
+    # Invert fractional reduction if < 1.0 (e.g. 1/4 or 1:4 -> 4:1)
+    if frac < 1:
+        frac = Fraction(1, 1) / frac
+
+    return frac
+
+
+def get_prime_factors(n: int) -> set[int]:
+    """Returns the set of unique prime factors of a positive integer n."""
+    factors = set()
+    d = 2
+    temp = abs(n)
+    while d * d <= temp:
+        if temp % d == 0:
+            factors.add(d)
+            while temp % d == 0:
+                temp //= d
+        d += 1
+    if temp > 1:
+        factors.add(temp)
+    return factors
+
+
+def check_prime_reachability(
+    target_frac: Fraction,
+    available_teeth: Sequence[int],
+    use_worm: bool = False,
+) -> tuple[bool, int | None]:
+    """Determines whether target_frac can mathematically be factored into the available gear teeth.
+
+    Engineering Rationale:
+    ---------------------
+    Any compound gear train has overall reduction ratio:
+        R = (product g_i) / (product p_i)
+    The numerator of R in lowest terms can only contain prime factors that divide
+    at least one driven gear tooth count g_i in available_teeth.
+    Similarly, unless a worm gear is used (where pinion has 1 tooth), the denominator
+    can only contain prime factors dividing available driving pinion counts.
+    If target_frac contains any prime factor not present in the available tooth set,
+    an exact solution is mathematically impossible regardless of stage depth.
+
+    Returns:
+        (is_reachable, unreachable_prime_factor)
+    """
+    gear_primes: set[int] = set()
+    for t in available_teeth:
+        gear_primes.update(get_prime_factors(t))
+
+    num_primes = get_prime_factors(target_frac.numerator)
+    for p in sorted(num_primes):
+        if p not in gear_primes:
+            return False, p
+
+    if not use_worm:
+        den_primes = get_prime_factors(target_frac.denominator)
+        for p in sorted(den_primes):
+            if p not in gear_primes:
+                return False, p
+
+    return True, None
+
 
 
 # Module-level index cache: tuple(available_teeth) -> (d1, d2, d1_ratios, d1_floats, d2_ratios, d2_floats)
@@ -159,7 +227,7 @@ class ReductionSolver:
     ) -> None:
         """Initializes the solver with available gear tooth inventory and cost model."""
         if available_teeth is None:
-            self.available_teeth = sorted(list(range(11, 41)))
+            self.available_teeth = sorted(list(range(9, 41)))
         else:
             sorted_teeth = sorted(list(set(available_teeth)))
             if any(t <= 0 for t in sorted_teeth):
@@ -255,6 +323,15 @@ class ReductionSolver:
         cost and introduces redundant cancellation stages. Therefore, once exact solutions
         are found at the minimal achievable depth k, the search returns immediately.
         """
+        # Fast prime-factor reachability check:
+        # If target_frac has any prime factor not dividing any available gear tooth,
+        # an exact solution is provably impossible. Avoid all combinatorial loops.
+        is_reachable, _ = check_prime_reachability(
+            target_frac, self.available_teeth, use_worm=use_worm
+        )
+        if not is_reachable:
+            return []
+
         found_solutions: list[ReductionSolution] = []
 
         if use_worm:
@@ -293,7 +370,7 @@ class ReductionSolver:
                 if found_solutions:
                     return found_solutions
 
-            # Depth 4: Worm + 3 spur stages
+            # Depth 4: Worm + 3 spur stages (1 worm + 1 spur + 2 spur)
             if self.max_stages >= 4:
                 for worm_pair in self._worm_pairs:
                     rem_ratio = target_frac / worm_pair.ratio
@@ -305,6 +382,53 @@ class ReductionSolver:
                                     found_solutions.append(
                                         ReductionSolution.create((worm_pair,) + s1 + s2, self.cost_model, target_frac)
                                     )
+                                    if len(found_solutions) >= max_solutions * 2:
+                                        return found_solutions
+                if found_solutions:
+                    return found_solutions
+
+            # Depth 5: Worm + 4 spur stages (1 worm + 2 spur + 2 spur)
+            if self.max_stages >= 5:
+                for worm_pair in self._worm_pairs:
+                    rem_ratio = target_frac / worm_pair.ratio
+                    for r2_a, s2_a_list in self._d2.items():
+                        needed_r2_b = rem_ratio / r2_a
+                        if needed_r2_b in self._d2 and r2_a <= needed_r2_b:
+                            for s2_a in s2_a_list[:1]:
+                                for s2_b in self._d2[needed_r2_b][:1]:
+                                    found_solutions.append(
+                                        ReductionSolution.create(
+                                            (worm_pair,) + s2_a + s2_b,
+                                            self.cost_model,
+                                            target_frac,
+                                        )
+                                    )
+                                    if len(found_solutions) >= max_solutions * 2:
+                                        return found_solutions
+                if found_solutions:
+                    return found_solutions
+
+            # Depth 6: Worm + 5 spur stages (1 worm + 1 spur + 2 spur + 2 spur)
+            if self.max_stages >= 6:
+                for worm_pair in self._worm_pairs:
+                    rem_ratio = target_frac / worm_pair.ratio
+                    for r1, s1_list in self._d1.items():
+                        rem_after_r1 = rem_ratio / r1
+                        for r2_a, s2_a_list in self._d2.items():
+                            needed_r2_b = rem_after_r1 / r2_a
+                            if needed_r2_b in self._d2 and r2_a <= needed_r2_b:
+                                for s1 in s1_list[:1]:
+                                    for s2_a in s2_a_list[:1]:
+                                        for s2_b in self._d2[needed_r2_b][:1]:
+                                            found_solutions.append(
+                                                ReductionSolution.create(
+                                                    (worm_pair,) + s1 + s2_a + s2_b,
+                                                    self.cost_model,
+                                                    target_frac,
+                                                )
+                                            )
+                                            if len(found_solutions) >= max_solutions * 2:
+                                                return found_solutions
                 if found_solutions:
                     return found_solutions
 
@@ -338,6 +462,8 @@ class ReductionSolver:
                                 found_solutions.append(
                                     ReductionSolution.create(s1 + s2, self.cost_model, target_frac)
                                 )
+                                if len(found_solutions) >= max_solutions * 3:
+                                    return found_solutions
                 if found_solutions:
                     return found_solutions
 
@@ -351,10 +477,56 @@ class ReductionSolver:
                                 found_solutions.append(
                                     ReductionSolution.create(s2_a + s2_b, self.cost_model, target_frac)
                                 )
+                                if len(found_solutions) >= max_solutions * 3:
+                                    return found_solutions
                 if found_solutions:
                     return found_solutions
 
-        return found_solutions
+            # Depth 5: 1 spur + 2 spur + 2 spur
+            if self.max_stages >= 5:
+                for r1, s1_list in self._d1.items():
+                    rem_after_r1 = target_frac / r1
+                    for r2_a, s2_a_list in self._d2.items():
+                        needed_r2_b = rem_after_r1 / r2_a
+                        if needed_r2_b in self._d2 and r2_a <= needed_r2_b:
+                            for s1 in s1_list[:1]:
+                                for s2_a in s2_a_list[:1]:
+                                    for s2_b in self._d2[needed_r2_b][:1]:
+                                        found_solutions.append(
+                                            ReductionSolution.create(
+                                                s1 + s2_a + s2_b,
+                                                self.cost_model,
+                                                target_frac,
+                                            )
+                                        )
+                                        if len(found_solutions) >= max_solutions * 2:
+                                            return found_solutions
+                if found_solutions:
+                    return found_solutions
+
+            # Depth 6: 2 spur + 2 spur + 2 spur
+            if self.max_stages >= 6:
+                for r2_a, s2_a_list in self._d2.items():
+                    rem_a = target_frac / r2_a
+                    for r2_b, s2_b_list in self._d2.items():
+                        if r2_b < r2_a:
+                            continue
+                        needed_r2_c = rem_a / r2_b
+                        if needed_r2_c in self._d2 and r2_b <= needed_r2_c:
+                            for s2_a in s2_a_list[:1]:
+                                for s2_b in s2_b_list[:1]:
+                                    for s2_c in self._d2[needed_r2_c][:1]:
+                                        found_solutions.append(
+                                            ReductionSolution.create(
+                                                s2_a + s2_b + s2_c,
+                                                self.cost_model,
+                                                target_frac,
+                                            )
+                                        )
+                                        if len(found_solutions) >= max_solutions * 2:
+                                            return found_solutions
+                if found_solutions:
+                    return found_solutions
 
         return found_solutions
 
@@ -410,6 +582,17 @@ class ReductionSolver:
                                 for s2 in self._d2[r2][:1]:
                                     candidates.append((worm_pair,) + s1 + s2)
 
+                if self.max_stages >= 5:
+                    for r2_a in self._d2_ratios[::8]:
+                        needed_r2_b = rem_float / float(r2_a)
+                        nearest_r2_b = get_nearest_ratios(
+                            needed_r2_b, self._d2_floats, self._d2_ratios, k=1
+                        )
+                        for r2_b in nearest_r2_b:
+                            for s2_a in self._d2[r2_a][:1]:
+                                for s2_b in self._d2[r2_b][:1]:
+                                    candidates.append((worm_pair,) + s2_a + s2_b)
+
         else:
             if self.max_stages >= 1:
                 nearest = get_nearest_ratios(
@@ -446,6 +629,20 @@ class ReductionSolver:
                         for s2_a in self._d2[r2_a][:1]:
                             for s2_b in self._d2[r2_b][:1]:
                                 candidates.append(s2_a + s2_b)
+
+            if self.max_stages >= 5:
+                for r1, spur1_list in list(self._d1.items())[::10]:
+                    rem_float_5 = target_float / float(r1)
+                    for r2_a in self._d2_ratios[::12]:
+                        needed_r2_b = rem_float_5 / float(r2_a)
+                        nearest_r2_b = get_nearest_ratios(
+                            needed_r2_b, self._d2_floats, self._d2_ratios, k=1
+                        )
+                        for r2_b in nearest_r2_b:
+                            for s1 in spur1_list[:1]:
+                                for s2_a in self._d2[r2_a][:1]:
+                                    for s2_b in self._d2[r2_b][:1]:
+                                        candidates.append(s1 + s2_a + s2_b)
 
         solutions: list[ReductionSolution] = []
         for train in candidates:

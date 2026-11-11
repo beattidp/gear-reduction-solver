@@ -24,6 +24,16 @@ class TestRatioParsing:
         assert parse_ratio(12.5) == Fraction(25, 2)
         assert parse_ratio("10") == Fraction(10, 1)
 
+    def test_parse_inverse_fraction_ratio(self) -> None:
+        """Inputs < 1.0 are automatically inverted to represent speed reduction."""
+        assert parse_ratio("1:4") == Fraction(4, 1)
+        assert parse_ratio("1/4") == Fraction(4, 1)
+        assert parse_ratio(0.25) == Fraction(4, 1)
+        assert parse_ratio("0.25") == Fraction(4, 1)
+        assert parse_ratio("2:5") == Fraction(5, 2)
+        assert parse_ratio("2/5") == Fraction(5, 2)
+        assert parse_ratio("1:1") == Fraction(1, 1)
+
     def test_invalid_ratio_rejected(self) -> None:
         with pytest.raises(ValueError):
             parse_ratio("-5:1")
